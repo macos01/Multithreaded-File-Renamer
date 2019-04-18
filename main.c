@@ -8,7 +8,7 @@
 #include <dirent.h>
 #include <string.h>
 
-#define MAX_FILES_IN_LIST 5
+#define MAX_FILES_IN_QUEUE 5
 #define MAX_FILENAME_LENGTH 150
 
 void *get_file_to_fix(void *arg);
@@ -19,7 +19,7 @@ int search_metadata();
 void *rename_by_metadata (void *arg);
 void *rename_by_name (void *arg);
 
-pthread_mutex_t mutex_date;
+pthread_mutex_t mutex_metadata;
 pthread_mutex_t mutex_name;
 pthread_cond_t queue_cond_metadata;
 pthread_cond_t queue_cond_name;
@@ -27,8 +27,8 @@ pthread_cond_t queue_cond_name;
 char *work_directory = "/home/usuarioso/renamer";
 char *input_directory = "./input";
 
-char queue_fix_by_name[MAX_FILES_IN_LIST][MAX_FILENAME_LENGTH];
-char queue_fix_by_metadata[MAX_FILES_IN_LIST][MAX_FILENAME_LENGTH];
+char queue_fix_by_name[MAX_FILES_IN_QUEUE][MAX_FILENAME_LENGTH];
+char queue_fix_by_metadata[MAX_FILES_IN_QUEUE][MAX_FILENAME_LENGTH];
 
 int nqueue_cond_name = 0;
 int nQueue_metadata = 0;
@@ -42,7 +42,7 @@ int main (int argc, char *argv[]){
     exit(errno);
   }
   
-  pthread_mutex_init (&mutex_date, NULL);
+  pthread_mutex_init (&mutex_metadata, NULL);
   pthread_mutex_init (&mutex_name, NULL);
   pthread_cond_init (&queue_cond_name, NULL);
   pthread_cond_init (&queue_cond_metadata, NULL);
@@ -55,7 +55,7 @@ int main (int argc, char *argv[]){
   pthread_join (th2, NULL);
   pthread_join (th3, NULL);
 
-  pthread_mutex_destroy(&mutex_date);
+  pthread_mutex_destroy(&mutex_metadata);
   pthread_mutex_destroy(&mutex_name);
   pthread_cond_destroy(&queue_cond_metadata);
   pthread_cond_destroy(&queue_cond_name);
@@ -90,7 +90,7 @@ void *get_file_to_fix(void *arg){
 	  pthread_mutex_unlock (&mutex_name);
 	}
 	else {
-	  pthread_mutex_lock (&mutex_date);
+	  pthread_mutex_lock (&mutex_metadata);
 	  
 	  fprintf(stdout,"%lu: %s => RENAME BY METADATA \n",(unsigned long)time(NULL),dp->d_name);
 	  
@@ -98,7 +98,7 @@ void *get_file_to_fix(void *arg){
 	  nQueue_metadata++;
 	  
 	  pthread_cond_signal (&queue_cond_metadata);
-	  pthread_mutex_unlock (&mutex_date);
+	  pthread_mutex_unlock (&mutex_metadata);
 	}
       }
     }
@@ -146,16 +146,16 @@ void *rename_by_metadata (void *arg) {
   
   while(1){
     
-    pthread_mutex_lock (&mutex_date);
+    pthread_mutex_lock (&mutex_metadata);
     
     while (nQueue_metadata == 0) {
-      pthread_cond_wait (&queue_cond_metadata, &mutex_date);
+      pthread_cond_wait (&queue_cond_metadata, &mutex_metadata);
     }
    
     strcpy(filename, queue_fix_by_name[nQueue_metadata - 1]);
     nQueue_metadata--;
   
-    pthread_mutex_unlock (&mutex_date);
+    pthread_mutex_unlock (&mutex_metadata);
     
     if(search_metadata()){
       //ok
