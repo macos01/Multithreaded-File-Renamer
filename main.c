@@ -21,7 +21,8 @@ int search_metadata();
 
 void *rename_by_metadata (void *arg);
 void *rename_by_name (void *arg);
-void *test_pipe (void *arg);
+void socket_renaming_client();
+void auto_renamer();
 
 int pipe_name[2];
 int pipe_metadata[2];
@@ -40,24 +41,84 @@ char queue_fix_by_metadata[MAX_FILES_IN_QUEUE][MAX_FILENAME_LENGTH];
 int nqueue_cond_name = 0;
 int nQueue_metadata = 0;
 
-int main (int argc, char *argv[]){
-  
-  pthread_t th1, th2, th3, th4;
+int main (int argc, char *argv[]) {
   
   if(chdir(work_directory)){
     perror("Chdir main");
-    exit(errno);
+    exit(1);
   }
   
-  if(pipe(pipe_name) == -1){
+   if(pipe(pipe_name) == -1){
     perror("Pipe name error");
-    exit(errno);
+    exit(1);
   }
   
   if(pipe(pipe_metadata) == -1){
     perror("Pipe metadata error");
-    exit(errno);
+    exit(1);
   }
+  
+  pid_t mi_pid, pid;
+  
+  pid = fork();
+  
+  switch (pid) {
+    case -1:
+      perror("fork main");
+      exit(1);
+    case 0:
+      if (close(pipe_metadata[WRITE]) != 0){
+	perror("Error close pipe_metadata WRITE on test_pipe");
+	exit(1);
+      }
+      socket_renaming_client();
+      break;
+    default:  
+      if (close(pipe_metadata[READ]) != 0){
+	perror("Error close pipe_metadata READ rename_by_metadata");
+	exit(1);
+      }
+      auto_renamer();
+      break;
+  }
+  
+  return 0;
+}
+
+void socket_renaming_client(){
+  
+  int result = 0;
+  char received[MAX_FILENAME_LENGTH];
+ 
+  while(1){
+    
+    bzero(received,MAX_FILENAME_LENGTH);    
+    result = read(pipe_metadata[READ],received, sizeof(received));
+    
+    if (result < 0) {
+      perror("Readerrno pipe metadata READ on test_pipe");
+      exit(1);
+    }
+    else {
+      printf("%lu: Received: %s\n",(unsigned long)time(NULL),received);
+      sleep(2);
+      printf("recibo\n");
+      //       if (close(pipe_metadata[READ]) != 0){
+	// 	perror("Error close pipe_metadata READ on test_pipe");
+      // 	exit(errno);
+      //}
+    }
+  }
+  
+  printf("termino");
+  
+  return NULL; 
+  
+}
+
+void auto_renamer(){
+  
+  pthread_t th1, th2, th3;
   
   pthread_mutex_init (&mutex_metadata, NULL);
   pthread_mutex_init (&mutex_name, NULL);
@@ -67,21 +128,16 @@ int main (int argc, char *argv[]){
   //pthread_create (&th1, NULL, rename_by_name, NULL);
   pthread_create (&th2, NULL, rename_by_metadata, NULL);
   pthread_create (&th3, NULL, get_file_to_fix, NULL);
-  pthread_create (&th4, NULL, test_pipe, NULL);
-  
-  
+ 
  // pthread_join (th1, NULL);
   pthread_join (th2, NULL);
   pthread_join (th3, NULL);
-  pthread_join (th4, NULL);
-
 
   pthread_mutex_destroy(&mutex_metadata);
   pthread_mutex_destroy(&mutex_name);
   pthread_cond_destroy(&queue_cond_metadata);
   pthread_cond_destroy(&queue_cond_name);
   
-  return 0;
 }
 
 void *get_file_to_fix(void *arg){
@@ -92,7 +148,7 @@ void *get_file_to_fix(void *arg){
   dir = opendir(input_directory);
   if (dir == NULL) {
     perror("opendir get_file_to_fix()");
-    exit(errno);
+    exit(1);
   }
   else {
     
@@ -167,11 +223,7 @@ void *rename_by_metadata (void *arg) {
   
   char filename[MAX_FILENAME_LENGTH];
   int result = 0;
-  /*
-  if (close(pipe_metadata[READ]) != 0){
-    perror("Error close pipe_metadata READ rename_by_metadata");
-    exit(errno);
-  }*/
+  
   
   while(1){
     
@@ -198,7 +250,7 @@ void *rename_by_metadata (void *arg) {
       
       if(result != strlen(filename) + 1){
 	perror("Error write pipe_metadata WRITE rename_by_metadata");
-	exit(errno);
+	exit(1);
       }
       
 //       if (close(pipe_metadata[WRITE]) != 0){
@@ -212,45 +264,6 @@ void *rename_by_metadata (void *arg) {
   return NULL;
 }
 
-
-void *test_pipe (void *arg) {
-  
-  //   sleep(1);
-  
-  int result = 0;
-  char received[MAX_FILENAME_LENGTH];
-  /*
-  if (close(pipe_metadata[WRITE]) != 0){
-        perror("Error close pipe_metadata WRITE on test_pipe");
-      exit(errno);
-  }*/
-  
-  while(1){
-    
-    bzero(received,MAX_FILENAME_LENGTH);
-    
-    result = read(pipe_metadata[READ],received, sizeof(received));
-    
-    if (result < 0) {
-      perror("Read pipe metadata READ on test_pipe");
-      exit(errno);
-    }
-    else {
-      printf("%lu: Received: %s\n",(unsigned long)time(NULL),received);
-      sleep(2);
-      printf("recibo\n");
-      //       if (close(pipe_metadata[READ]) != 0){
-	// 	perror("Error close pipe_metadata READ on test_pipe");
-      // 	exit(errno);
-      //}
-    }
-  }
-  
-  printf("termino");
-  
-  return NULL; 
-  
-}
 
 
 int search_metadata() {
