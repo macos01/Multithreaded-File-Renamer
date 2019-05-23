@@ -7,6 +7,17 @@
 #include <errno.h>
 #include <dirent.h>
 #include <string.h>
+#include <stdio.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <errno.h>
+#include <stdlib.h>
+#include <netdb.h>
+#include <string.h>
+
+#define MAX_DATA 1000
+#define PORT "6767"
+#define BACKLOG 10 // how many pending connections queue will hold
 
 #define MAX_FILES_IN_QUEUE 5
 #define MAX_FILENAME_LENGTH 150
@@ -49,7 +60,6 @@ int main (int argc, char *argv[]) {
     exit(1);
   }
   
- 
   if(pipe(pipe_metadata) == -1){
     perror("Pipe metadata error");
     exit(1);
@@ -69,7 +79,6 @@ int main (int argc, char *argv[]) {
       close(pipe_metadata[1]);
       close(pipe_name[1]);
       socket_renaming_client();
-      socket_renaming_client2();
       //close(pipe_name[0]);
       //close(pipe_metadata[0]);
   }
@@ -92,19 +101,120 @@ void socket_renaming_client(){
   
   int result2 = 0;
   char received[MAX_FILENAME_LENGTH];
-
-  //all time reading messages..
-  while(1){
+  
+  //structs to create socket and response client getaddrinfo request
+  struct addrinfo hints, *res;
+  memset(&hints,0, sizeof(hints));
+  hints.ai_flags = AI_PASSIVE;
+  hints.ai_protocol = IPPROTO_TCP;
+  hints.ai_socktype = SOCK_STREAM;
+  hints.ai_family = AF_INET;
+  
+  
+  /*
+	 AI_PASSIVE with NULL -> 0.0.0.0
+*/
+  int s = getaddrinfo(NULL, PORT,&hints,&res);
+  if (s != 0) {
+      perror("ERROR getaddrinfo");
+      exit(1);
+  }  
+  
+  //creating socket
+  int sock_fd = socket(res->ai_family,res->ai_socktype,res->ai_protocol);
+  if (sock_fd == -1){
+   perror("ERROR creating socket");
+   exit(1);
+  }
+  
+  //assigning a name to a socket
+  if (bind(sock_fd,(struct sockaddr *) res->ai_addr,res->ai_addrlen) != 0) {
+    perror("ERROR bind socket");
+    exit(1);
+  }
+  
+  //listening
+  if (listen(sock_fd,BACKLOG) != 0) {
+    perror("ERROR listen");
+    exit(1);
+  }
     
-    while ((result2 = read(pipe_metadata[READ],received, sizeof(received))) > 0){
-      printf("%lu: Received: *** %s ***\n",(unsigned long)time(NULL),received);
-    }
-   
-    if (result2 < 0) {
-      perror("read pipes READ on socket");
+  fprintf(stdout,"Ready \n");
+  
+ 
+        struct sockaddr_storage client; //IPv4 and IPv6
+    socklen_t client_size = sizeof(client);
+    
+    //accept the conection and retrieve the client info and store in client struct
+    int client_fd = accept(sock_fd,(struct sockaddr *) &client, &client_size);
+    if (client_fd == -1){
+      perror("ERROR accept");
       exit(1);
     }
+    
+    
+    
+    //char *buffer = "Esto es una prueba";
+  
+  while((result2 = read(pipe_metadata[READ],received, sizeof(received))) > 0) {
+    
+    
+      
+    write(client_fd,received,sizeof(received));
+    
+    
+//     int len = read(client_fd,buffer,sizeof(buffer) - 1);
+//     buffer[len] = '\0';
+//     if (len == -1){
+//       perror("ERROR reading from client");
+//       exit(1);
+//     }
+    
+    
+//    
+//       
+//     char host[NI_MAXHOST], service[NI_MAXSERV];
+// 
+//     if (getnameinfo((struct sockaddr *) &client, sizeof(client), host, NI_MAXHOST, service, NI_MAXSERV, NI_NUMERICSERV) != 0) {
+// 	perror("ERROR getnameinfo");
+// 	exit(1);
+//     }
+//     
+//     printf("Received %i bytes from %s:%s\n", len, host, service);
+//     printf("Received: %s\n",buffer);
+    
+    
+    
+    
+//     if (send(client_fd,buffer,len,0) != len){
+//       perror("ERROR sending data to client");
+//       exit(1);
+//     }
+    
+//     printf("Enviado\n");
+    
+      
   }
+  
+    
+//     if(shutdown(client_fd , SHUT_RDWR)){
+//       perror("ERROR shutdown");
+//       exit(1);
+//     } 
+  
+  
+  //all time reading messages..
+//   while(1){
+//     
+//     while ((result2 = read(pipe_metadata[READ],received, sizeof(received))) > 0){
+//       printf("%lu: Received: *** %s ***\n",(unsigned long)time(NULL),received);
+//     }
+//    
+//     if (result2 < 0) {
+//       perror("read pipes READ on socket");
+//       exit(1);
+//     }
+//   }
   
 }
 
@@ -150,15 +260,15 @@ void *get_file_to_fix(void *arg){
 	sleep(1);
 	
 	if (!strncmp(dp->d_name,"3",1)) {
-	  pthread_mutex_lock (&mutex_name);
-	  
-	  //fprintf(stdout,"%lu: %s => FIX NAME \n",(unsigned long)time(NULL),dp->d_name);
-	  
-	  strcpy(queue_fix_by_name[nQueue_rename_by_name],dp->d_name);
-	  nQueue_rename_by_name++;
-	  
-	  pthread_cond_signal (&queue_cond_name);
-	  pthread_mutex_unlock (&mutex_name);
+// 	  pthread_mutex_lock (&mutex_name);
+// 	  
+// 	  //fprintf(stdout,"%lu: %s => FIX NAME \n",(unsigned long)time(NULL),dp->d_name);
+// 	  
+// 	  //strcpy(queue_fix_by_name[nQueue_rename_by_name],dp->d_name);
+// 	  //nQueue_rename_by_name++;
+// 	  
+// 	  pthread_cond_signal (&queue_cond_name);
+// 	  pthread_mutex_unlock (&mutex_name);
 	}
 	else {
 	  pthread_mutex_lock (&mutex_metadata);
